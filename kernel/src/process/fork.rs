@@ -336,10 +336,8 @@ impl ProcessManager {
 
         // 如果新进程使用不同的 pid 或 namespace，
         // 则不允许它与分叉任务共享线程组。
-        if clone_flags.contains(CloneFlags::CLONE_THREAD) {
-            if clone_flags.contains(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWPID) {
-                return Err(SystemError::EINVAL);
-            }
+        if clone_flags.contains(CloneFlags::CLONE_THREAD) && clone_flags.contains(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWPID) {
+            return Err(SystemError::EINVAL);
             // TODO: 判断新进程与当前进程namespace是否相同，不同则返回错误
         }
 
@@ -414,7 +412,7 @@ impl ProcessManager {
         });
 
         // 拷贝信号相关数据
-        Self::copy_sighand(&clone_flags, &current_pcb, &pcb).map_err(|e| {
+        Self::copy_sighand(&clone_flags, &current_pcb, pcb).map_err(|e| {
             panic!(
                 "fork: Failed to copy sighand from current process, current pid: [{:?}], new pid: [{:?}]. Error: {:?}",
                 current_pcb.pid(), pcb.pid(), e
@@ -422,7 +420,7 @@ impl ProcessManager {
         })?;
 
         // 拷贝线程
-        Self::copy_thread(&current_pcb, &pcb, clone_args,&current_trapframe).unwrap_or_else(|e| {
+        Self::copy_thread(current_pcb, pcb, clone_args,current_trapframe).unwrap_or_else(|e| {
             panic!(
                 "fork: Failed to copy thread from current process, current pid: [{:?}], new pid: [{:?}]. Error: {:?}",
                 current_pcb.pid(), pcb.pid(), e
@@ -438,7 +436,7 @@ impl ProcessManager {
                 (*ptr).tgid = current_pcb.tgid;
             }
         } else {
-            pcb.thread.write_irqsave().group_leader = Arc::downgrade(&pcb);
+            pcb.thread.write_irqsave().group_leader = Arc::downgrade(pcb);
             unsafe {
                 let ptr = pcb.as_ref() as *const ProcessControlBlock as *mut ProcessControlBlock;
                 (*ptr).tgid = pcb.tgid;
@@ -468,7 +466,7 @@ impl ProcessManager {
             }
         } else {
             // 新创建的进程，设置其父进程为当前进程
-            *pcb.real_parent_pcb.write_irqsave() = Arc::downgrade(&current_pcb);
+            *pcb.real_parent_pcb.write_irqsave() = Arc::downgrade(current_pcb);
             pcb.exit_signal
                 .store(clone_args.exit_signal, Ordering::SeqCst);
         }

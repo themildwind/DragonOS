@@ -372,7 +372,7 @@ impl EventPoll {
                         epds.events |=
                             EPollEventType::EPOLLERR.bits() | EPollEventType::EPOLLHUP.bits();
 
-                        Self::ep_modify(&mut epoll_guard, ep_item, &epds)?;
+                        Self::ep_modify(&mut epoll_guard, ep_item, epds)?;
                     }
                 }
             }
@@ -598,12 +598,11 @@ impl EventPoll {
         }
 
         let test_poll = dst_file.lock_irqsave().poll();
-        if test_poll.is_err() {
-            if test_poll.unwrap_err() == SystemError::EOPNOTSUPP_OR_ENOTSUP {
-                // 如果目标文件不支持poll
-                return Err(SystemError::ENOSYS);
-            }
+        if test_poll.is_err() && test_poll.unwrap_err() == SystemError::EOPNOTSUPP_OR_ENOTSUP {
+            // 如果目标文件不支持poll
+            return Err(SystemError::ENOSYS);
         }
+        
 
         epoll_guard.ep_items.insert(epitem.fd, epitem.clone());
 
